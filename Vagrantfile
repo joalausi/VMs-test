@@ -9,6 +9,7 @@ Vagrant.configure("2") do |config|
   config.vm.box = "ubuntu/jammy64"
   config.vm.boot_timeout = 600
 
+# ----lb-01----
   config.vm.define "lb-01" do |node|
     node.vm.hostname = "lb-01"
     node.vm.network "private_network", ip: "192.168.56.10"
@@ -21,8 +22,12 @@ Vagrant.configure("2") do |config|
     end
 
     node.vm.provision "shell", path: "scripts/common.sh"
+    node.vm.provision "shell", path: "scripts/lb.sh"
+    node.vm.provision "shell", path: "scripts/firewall.sh", args: ["lb"]
+    node.vm.provision "shell", path: "scripts/fail2ban.sh"
   end
 
+  # ----web-01----
   config.vm.define "web-01" do |node|
     node.vm.hostname = "web-01"
     node.vm.network "private_network", ip: "192.168.56.11"
@@ -35,8 +40,12 @@ Vagrant.configure("2") do |config|
     end
 
     node.vm.provision "shell", path: "scripts/common.sh"
+    node.vm.provision "shell", path: "scripts/web.sh", args: ["web-01"]
+    node.vm.provision "shell", path: "scripts/firewall.sh", args: ["web"]
+    node.vm.provision "shell", path: "scripts/fail2ban.sh"
   end
 
+  # ----web-02----
   config.vm.define "web-02" do |node|
     node.vm.hostname = "web-02"
     node.vm.network "private_network", ip: "192.168.56.12"
@@ -49,8 +58,12 @@ Vagrant.configure("2") do |config|
     end
 
     node.vm.provision "shell", path: "scripts/common.sh"
+    node.vm.provision "shell", path: "scripts/web.sh", args: ["web-02"]
+    node.vm.provision "shell", path: "scripts/firewall.sh", args: ["web"]
+    node.vm.provision "shell", path: "scripts/fail2ban.sh"
   end
 
+  # ----app-01----
   config.vm.define "app-01" do |node|
     node.vm.hostname = "app-01"
     node.vm.network "private_network", ip: "192.168.56.13"
@@ -63,6 +76,9 @@ Vagrant.configure("2") do |config|
     end
 
     node.vm.provision "shell", path: "scripts/common.sh"
+    node.vm.provision "shell", path: "scripts/app.sh"
+    node.vm.provision "shell", path: "scripts/firewall.sh", args: ["app"]
+    node.vm.provision "shell", path: "scripts/fail2ban.sh"
   end
 end
   # The most common configuration options are documented and commented below.
