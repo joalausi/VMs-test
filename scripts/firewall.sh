@@ -33,7 +33,7 @@ case "$ROLE" in
   lb)
     log "Allowing HTTP/HTTPS to load balancer"
     ufw allow 80/tcp
-    ufw allow 443/tcp
+    # ufw allow 443/tcp
     ;;
 
   web)
