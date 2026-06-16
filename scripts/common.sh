@@ -7,34 +7,55 @@ log() {
 
 export DEBIAN_FRONTEND=noninteractive
 
+DEVOPS_PASSWORD="${DEVOPS_PASSWORD:-DevOps123!}"
+
 log "Updating package index"
 apt-get update -y
+
+log "Upgrading installed packages"
+apt-get upgrade -y
+apt-get autoremove -y
 
 log "Installing base packages"
 apt-get install -y \
   curl \
   vim \
   ufw \
-  unattended-upgrades
+  unattended-upgrades \
+  openssh-server
+
+log "Configuring hostname resolution"
+sed -i '/# Server Sorcery hosts start/,/# Server Sorcery hosts end/d' /etc/hosts
+
+cat >>/etc/hosts <<'EOF'
+# Server Sorcery hosts start
+192.168.56.10 lb-01
+192.168.56.11 web-01
+192.168.56.12 web-02
+192.168.56.13 app-01
+# Server Sorcery hosts end
+EOF
 
 log "Creating devops user if missing"
 if ! id -u devops >/dev/null 2>&1; then
   useradd -m -s /bin/bash devops
 fi
 
+log "Setting password for devops user"
+echo "devops:${DEVOPS_PASSWORD}" | chpasswd
+
 log "Adding devops user to sudo group"
 usermod -aG sudo devops
 
-log "Configuring passwordless sudo for devops"
-cat >/etc/sudoers.d/devops <<'EOF'
-devops ALL=(ALL) NOPASSWD:ALL
-EOF
-chmod 440 /etc/sudoers.d/devops
+log "Ensuring devops sudo is password-protected"
+rm -f /etc/sudoers.d/devops
 
-log "Copying Vagrant SSH authorized key to devops user"
+log "Configuring SSH authorized key for devops"
 mkdir -p /home/devops/.ssh
 
-if [ -f /home/vagrant/.ssh/authorized_keys ]; then
+if [ -f /vagrant/.ssh/devops_key.pub ]; then
+  cp /vagrant/.ssh/devops_key.pub /home/devops/.ssh/authorized_keys
+elif [ -f /home/vagrant/.ssh/authorized_keys ]; then
   cp /home/vagrant/.ssh/authorized_keys /home/devops/.ssh/authorized_keys
 fi
 
@@ -45,7 +66,7 @@ if [ -f /home/devops/.ssh/authorized_keys ]; then
   chmod 600 /home/devops/.ssh/authorized_keys
 fi
 
-log "Applying SSH hardening"
+log "Applying SSH hardening for provisioning stage"
 cat >/etc/ssh/sshd_config.d/99-server-sorcery.conf <<'EOF'
 PermitRootLogin no
 PasswordAuthentication no
