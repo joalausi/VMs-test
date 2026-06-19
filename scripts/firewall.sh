@@ -42,9 +42,9 @@ case "$ROLE" in
     ;;
 
   app)
-    log "Allowing HTTP only from web-01 and web-02"
-    ufw allow from 192.168.56.11 to any port 80 proto tcp
-    ufw allow from 192.168.56.12 to any port 80 proto tcp
+    log "Allowing backend API only from web-01 and web-02"
+    ufw allow from 192.168.56.11 to any port 3000 proto tcp
+    ufw allow from 192.168.56.12 to any port 3000 proto tcp
     ;;
 
   *)

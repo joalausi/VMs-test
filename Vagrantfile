@@ -40,6 +40,7 @@ Vagrant.configure("2") do |config|
     end
 
     node.vm.provision "shell", path: "scripts/common.sh"
+    node.vm.provision "shell", path: "scripts/docker.sh"
     node.vm.provision "shell", path: "scripts/web.sh", args: ["web-01"]
     node.vm.provision "shell", path: "scripts/firewall.sh", args: ["web"]
     node.vm.provision "shell", path: "scripts/fail2ban.sh"
@@ -58,6 +59,7 @@ Vagrant.configure("2") do |config|
     end
 
     node.vm.provision "shell", path: "scripts/common.sh"
+    node.vm.provision "shell", path: "scripts/docker.sh"
     node.vm.provision "shell", path: "scripts/web.sh", args: ["web-02"]
     node.vm.provision "shell", path: "scripts/firewall.sh", args: ["web"]
     node.vm.provision "shell", path: "scripts/fail2ban.sh"
@@ -76,6 +78,7 @@ Vagrant.configure("2") do |config|
     end
 
     node.vm.provision "shell", path: "scripts/common.sh"
+    node.vm.provision "shell", path: "scripts/docker.sh"
     node.vm.provision "shell", path: "scripts/app.sh"
     node.vm.provision "shell", path: "scripts/firewall.sh", args: ["app"]
     node.vm.provision "shell", path: "scripts/fail2ban.sh"
