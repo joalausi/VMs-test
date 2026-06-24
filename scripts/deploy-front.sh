@@ -21,7 +21,7 @@ echo "==> Starting frontend container"
 docker run -d \
   --name "$CONTAINER_NAME" \
   --restart unless-stopped \
-  -p 80:80 \
+  --network host \
   --add-host app-01:192.168.56.13 \
   -e WEB_SERVER_NAME="$WEB_SERVER_NAME" \
   "$IMAGE_NAME"

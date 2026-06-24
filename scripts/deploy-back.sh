@@ -16,8 +16,9 @@ echo "==> Starting backend container"
 docker run -d \
   --name "$CONTAINER_NAME" \
   --restart unless-stopped \
-  -p 3000:3000 \
+  --network host \
   -e BACKEND_SERVER_NAME=app-01 \
+  -e PORT=3000 \
   "$IMAGE_NAME"
 
 echo "==> Backend container status"
