@@ -180,8 +180,8 @@ This script:
 ### 6. Deploy the frontend containers on `web-01` and `web-02`
 
 ```powershell
-vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
-vagrant ssh web-02 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
+vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-front.sh"
+vagrant ssh web-02 -c "sudo bash /vagrant/scripts/deploy-front.sh"
 ```
 
 This script:
@@ -286,7 +286,7 @@ The frontend runs on both web servers in Docker containers.
 Each frontend container serves:
 
 ```text
-/
+
 ```
 
 and proxies backend API requests through:
@@ -509,8 +509,8 @@ vagrant ssh app-01 -c "sudo bash /vagrant/scripts/deploy-back.sh"
 Deploy frontend:
 
 ```powershell
-vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
-vagrant ssh web-02 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
+vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-front.sh"
+vagrant ssh web-02 -c "sudo bash /vagrant/scripts/deploy-front.sh"
 ```
 
 Check containers:
@@ -557,7 +557,7 @@ Stop NGINX and redeploy frontend:
 
 ```powershell
 vagrant ssh web-01 -c "sudo systemctl stop nginx"
-vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
+vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-front.sh"
 ```
 
 Repeat for `web-02` if needed.
