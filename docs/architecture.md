@@ -1,132 +1,111 @@
 # Architecture
 
-## Overview
+## VM layout
 
-This project creates a small production-like virtual infrastructure using Vagrant and VirtualBox.
+| VM       |              IP | Role                |
+| -------- | --------------: | ------------------- |
+| `lb-01`  | `192.168.56.10` | NGINX load balancer |
+| `web-01` | `192.168.56.11` | frontend container  |
+| `web-02` | `192.168.56.12` | frontend container  |
+| `app-01` | `192.168.56.13` | backend container   |
 
-The infrastructure consists of four Ubuntu Server virtual machines:
-
-| VM | Role | IP Address |
-|---|---|---:|
-| `lb-01` | Load Balancer | `192.168.56.10` |
-| `web-01` | Web Server 1 | `192.168.56.11` |
-| `web-02` | Web Server 2 | `192.168.56.12` |
-| `app-01` | Application Server | `192.168.56.13` |
-
-## Architecture Diagram
+## Traffic flow
 
 ```text
-Host machine
+Host browser
     |
-    | HTTP
     v
-lb-01 / 192.168.56.10
-Nginx Load Balancer
+lb-01:80
     |
-    +--> web-01 / 192.168.56.11
-    |    Nginx Web Server
+    +--> web-01:80
     |
-    +--> web-02 / 192.168.56.12
-         Nginx Web Server
-              |
-              v
-         app-01 / 192.168.56.13
-         Application Server
+    +--> web-02:80
+             |
+             v
+          app-01:3000
 ```
 
-## Network Design
-
-All VMs are connected through a private network:
+The host machine should use only:
 
 ```text
-192.168.56.0/24
+http://192.168.56.10
 ```
 
-Static IPs are used to make communication predictable and stable.
+The backend is internal. It should not be accessed directly from the host.
 
-The main private network interface inside the VMs is usually:
-
-```text
-enp0s8
-```
-
-The NAT interface is usually:
-
-```text
-enp0s3
-```
-
-The NAT interface is used by Vagrant and the VM for internet access, package installation, and SSH management.
-
-## Traffic Flow
-
-The intended HTTP traffic flow is:
-
-```text
-Host machine
-    -> lb-01
-        -> web-01 or web-02
-            -> app-01
-```
-
-The host machine should access only the load balancer directly.
-
-The web servers should be reached through the load balancer.
-
-The application server should not be directly exposed to the host or to the load balancer.
-
-## Roles
-
-### lb-01
-
-`lb-01` runs Nginx as a load balancer.
-
-It listens on port `80` and forwards requests to:
-
-```text
-192.168.56.11:80
-192.168.56.12:80
-```
-
-### web-01 and web-02
-
-`web-01` and `web-02` run Nginx and serve simple HTML pages.
-
-Each page identifies which server responded.
-
-This makes it possible to verify that load balancing works.
+## Containers
 
 ### app-01
 
-`app-01` runs a simple diagnostic Nginx page.
+Runs backend container:
 
-It represents the application layer and is reachable only from the web servers.
+```text
+infrastructure-insight-backend
+```
 
-## Security Boundaries
+Endpoints:
 
-The infrastructure uses UFW firewall rules to reduce the attack surface.
+```text
+GET /health
+GET /metrics
+```
 
-| Source | Destination | Access |
-|---|---|---|
-| Host | `lb-01:80` | Allowed |
-| Host | `web-01:80` | Blocked |
-| Host | `web-02:80` | Blocked |
-| Host | `app-01:80` | Blocked |
-| `lb-01` | `web-01:80` | Allowed |
-| `lb-01` | `web-02:80` | Allowed |
-| `lb-01` | `app-01:80` | Blocked |
-| `web-01` | `app-01:80` | Allowed |
-| `web-02` | `app-01:80` | Allowed |
+The backend returns hostname, OS, CPU, memory, uptime, timestamp and request counter.
 
-SSH is allowed for administration and Vagrant management.
+### web-01 / web-02
 
-## Summary
+Run frontend container:
 
-The final result is a small layered infrastructure:
+```text
+infrastructure-insight-frontend
+```
 
-- one public entry point;
-- two web servers behind a load balancer;
-- one isolated application server;
-- static private networking;
-- basic Linux security hardening;
-- firewall-based traffic restrictions.
+Frontend routes:
+
+```text
+/
+server-info.json
+/api/metrics
+/api/health
+```
+
+`server-info.json` shows which web server handled the request.
+
+`/api/metrics` is proxied to:
+
+```text
+app-01:3000/metrics
+```
+
+## Load balancing
+
+`lb-01` uses NGINX and forwards traffic to both web servers.
+
+Check:
+
+```powershell
+1..10 | ForEach-Object { curl.exe -s http://192.168.56.10/server-info.json }
+```
+
+Expected: responses alternate between `web-01` and `web-02`.
+
+## Firewall model
+
+| Source   | Destination   | Status  |
+| -------- | ------------- | ------- |
+| Host     | `lb-01:80`    | allowed |
+| Host     | `web-01:80`   | blocked |
+| Host     | `web-02:80`   | blocked |
+| Host     | `app-01:3000` | blocked |
+| `lb-01`  | `web-01:80`   | allowed |
+| `lb-01`  | `web-02:80`   | allowed |
+| `web-01` | `app-01:3000` | allowed |
+| `web-02` | `app-01:3000` | allowed |
+
+## Docker networking note
+
+Containers use host networking.
+
+Reason: Docker port publishing with `-p` can expose ports through Docker-managed iptables rules and bypass expected UFW behavior.
+
+With host networking, UFW controls the VM ports directly.

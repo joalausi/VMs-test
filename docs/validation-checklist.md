@@ -1,14 +1,14 @@
 # Validation Checklist
 
-This document contains commands used to validate the Server Sorcery 101 infrastructure.
+Use this before submitting the project.
 
-## 1. VM Status
+## 1. VM status
 
 ```powershell
 vagrant status
 ```
 
-Expected result:
+Expected:
 
 ```text
 lb-01     running
@@ -17,247 +17,139 @@ web-02    running
 app-01    running
 ```
 
-## 2. Hostnames and Static IPs
+## 2. Docker status
 
 ```powershell
-vagrant ssh lb-01 -c "hostname && ip -4 addr show enp0s8"
-vagrant ssh web-01 -c "hostname && ip -4 addr show enp0s8"
-vagrant ssh web-02 -c "hostname && ip -4 addr show enp0s8"
-vagrant ssh app-01 -c "hostname && ip -4 addr show enp0s8"
+vagrant ssh app-01 -c "docker --version && sudo systemctl is-active docker"
+vagrant ssh web-01 -c "docker --version && sudo systemctl is-active docker"
+vagrant ssh web-02 -c "docker --version && sudo systemctl is-active docker"
 ```
 
-Expected IPs:
-
-| VM | IP |
-|---|---:|
-| `lb-01` | `192.168.56.10` |
-| `web-01` | `192.168.56.11` |
-| `web-02` | `192.168.56.12` |
-| `app-01` | `192.168.56.13` |
-
-## 3. Network Connectivity
-
-```powershell
-vagrant ssh lb-01 -c "ping -c 3 192.168.56.11"
-vagrant ssh lb-01 -c "ping -c 3 192.168.56.12"
-vagrant ssh lb-01 -c "ping -c 3 192.168.56.13"
-```
-
-Expected result:
-
-```text
-0% packet loss
-```
-
-## 4. Web Server Health Checks
-
-```powershell
-vagrant ssh lb-01 -c "curl -s http://192.168.56.11/health"
-vagrant ssh lb-01 -c "curl -s http://192.168.56.12/health"
-```
-
-Expected result:
-
-```text
-ok web-01
-ok web-02
-```
-
-## 5. Application Server Health Check
-
-```powershell
-vagrant ssh web-01 -c "curl -s http://192.168.56.13/health"
-vagrant ssh web-02 -c "curl -s http://192.168.56.13/health"
-```
-
-Expected result:
-
-```text
-ok app-01
-ok app-01
-```
-
-## 6. Load Balancer
-
-```powershell
-curl.exe http://192.168.56.10
-```
-
-Expected result:
-
-```text
-Hello from web-01
-```
-
-or:
-
-```text
-Hello from web-02
-```
-
-Repeated test:
-
-```powershell
-1..8 | ForEach-Object { curl.exe -s http://192.168.56.10 | Select-String "Hello from" }
-```
-
-Expected result: responses from both `web-01` and `web-02`.
-
-## 7. Firewall Status
-
-```powershell
-vagrant ssh lb-01 -c "sudo ufw status verbose"
-vagrant ssh web-01 -c "sudo ufw status verbose"
-vagrant ssh web-02 -c "sudo ufw status verbose"
-vagrant ssh app-01 -c "sudo ufw status verbose"
-```
-
-Expected result:
-
-```text
-Status: active
-Default: deny (incoming), allow (outgoing), disabled (routed)
-```
-
-Expected firewall model:
-
-| Source | Destination | Expected |
-|---|---|---|
-| Host | `lb-01:80` | Allowed |
-| Host | `web-01:80` | Blocked |
-| Host | `web-02:80` | Blocked |
-| Host | `app-01:80` | Blocked |
-| `lb-01` | `web-01:80` | Allowed |
-| `lb-01` | `web-02:80` | Allowed |
-| `lb-01` | `app-01:80` | Blocked |
-| `web-01` | `app-01:80` | Allowed |
-| `web-02` | `app-01:80` | Allowed |
-
-## 8. Direct Web Access Should Be Blocked
-
-```powershell
-curl.exe --connect-timeout 3 http://192.168.56.11
-curl.exe --connect-timeout 3 http://192.168.56.12
-```
-
-Expected result:
-
-```text
-Connection timed out
-```
-
-## 9. Load Balancer Should Not Access app-01 Directly
-
-```powershell
-vagrant ssh lb-01 -c "timeout 3 curl -s http://192.168.56.13/health || echo blocked"
-```
-
-Expected result:
-
-```text
-blocked
-```
-
-## 10. SSH Hardening
-
-```powershell
-vagrant ssh lb-01 -c "sudo sshd -T | grep -E 'permitrootlogin|passwordauthentication|pubkeyauthentication|allowusers'"
-```
-
-Expected result:
-
-```text
-permitrootlogin no
-passwordauthentication no
-pubkeyauthentication yes
-allowusers devops vagrant
-```
-
-## 11. DevOps User
-
-```powershell
-vagrant ssh lb-01 -c "id devops && groups devops"
-```
-
-Expected result:
-
-```text
-devops
-sudo
-```
-
-Optional login test:
-
-```powershell
-vagrant ssh lb-01 -- -l devops
-```
-
-Inside the VM:
-
-```bash
-whoami
-sudo whoami
-exit
-```
-
-Expected result:
-
-```text
-devops
-root
-```
-
-## 12. Secure Umask
-
-```powershell
-vagrant ssh lb-01 -c "cat /etc/profile.d/99-secure-umask.sh && grep '^UMASK' /etc/login.defs"
-```
-
-Expected result:
-
-```text
-umask 027
-UMASK 027
-```
-
-## 13. Automatic Security Updates
-
-```powershell
-vagrant ssh lb-01 -c "systemctl is-active unattended-upgrades"
-vagrant ssh web-01 -c "systemctl is-active unattended-upgrades"
-vagrant ssh web-02 -c "systemctl is-active unattended-upgrades"
-vagrant ssh app-01 -c "systemctl is-active unattended-upgrades"
-```
-
-Expected result:
+Expected:
 
 ```text
 active
 ```
 
-## 14. Fail2Ban
+## 3. Backend container
 
 ```powershell
-vagrant ssh lb-01 -c "sudo systemctl is-active fail2ban"
-vagrant ssh lb-01 -c "sudo fail2ban-client status"
-vagrant ssh lb-01 -c "sudo fail2ban-client status sshd"
+vagrant ssh app-01 -c "sudo docker ps --filter name=infrastructure-insight-backend"
+vagrant ssh app-01 -c "curl -s http://localhost:3000/metrics"
 ```
 
-Expected result:
+Expected:
 
 ```text
-active
-Jail list: sshd
+backend_server":"app-01
 ```
 
-It is normal if the number of banned IPs is `0`.
-
-## 15. Final Quick Check
+## 4. Frontend containers
 
 ```powershell
-vagrant status
-curl.exe http://192.168.56.10
-1..8 | ForEach-Object { curl.exe -s http://192.168.56.10 | Select-String "Hello from" }
-vagrant ssh lb-01 -c "sudo ufw status verbose"
-vagrant ssh lb-01 -c "sudo fail2ban-client status"
+vagrant ssh web-01 -c "sudo docker ps --filter name=infrastructure-insight-frontend"
+vagrant ssh web-02 -c "sudo docker ps --filter name=infrastructure-insight-frontend"
+```
+
+Expected: both containers are `Up`.
+
+## 5. Web server identity
+
+```powershell
+vagrant ssh web-01 -c "curl -s http://localhost/server-info.json"
+vagrant ssh web-02 -c "curl -s http://localhost/server-info.json"
+```
+
+Expected:
+
+```text
+web-01
+web-02
+```
+
+## 6. Frontend to backend
+
+```powershell
+vagrant ssh web-01 -c "curl -s http://localhost/api/metrics"
+vagrant ssh web-02 -c "curl -s http://localhost/api/metrics"
+```
+
+Expected:
+
+```text
+backend_server":"app-01
+```
+
+## 7. Load balancer
+
+```powershell
+curl.exe -I http://192.168.56.10
+```
+
+Expected:
+
+```text
+HTTP/1.1 200 OK
+```
+
+Round-robin check:
+
+```powershell
+1..10 | ForEach-Object { curl.exe -s http://192.168.56.10/server-info.json }
+```
+
+Expected: both `web-01` and `web-02` appear.
+
+## 8. Browser check
+
+Open:
+
+```text
+http://192.168.56.10
+```
+
+Expected:
+
+* dashboard loads;
+* backend metrics are visible;
+* responding web server is visible;
+* refresh switches between `web-01` and `web-02`.
+
+## 9. Firewall status
+
+```powershell
+vagrant ssh lb-01 -c "sudo ufw status numbered"
+vagrant ssh web-01 -c "sudo ufw status numbered"
+vagrant ssh web-02 -c "sudo ufw status numbered"
+vagrant ssh app-01 -c "sudo ufw status numbered"
+```
+
+Expected:
+
+* `lb-01` allows `80/tcp`;
+* `web-01` allows `80/tcp` from `192.168.56.10`;
+* `web-02` allows `80/tcp` from `192.168.56.10`;
+* `app-01` allows `3000/tcp` from `192.168.56.11` and `192.168.56.12`.
+
+## 10. Negative access tests
+
+Backend should be blocked from host:
+
+```powershell
+curl.exe --connect-timeout 5 http://192.168.56.13:3000/metrics
+```
+
+Web servers should be blocked from host:
+
+```powershell
+curl.exe --connect-timeout 5 http://192.168.56.11/server-info.json
+curl.exe --connect-timeout 5 http://192.168.56.12/server-info.json
+```
+
+Expected: timeout or failed connection.
+
+## 11. Smoke test
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
 ```

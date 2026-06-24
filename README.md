@@ -1,68 +1,73 @@
-# Server Sorcery 101
+# Infrastructure Insight
 
 ## Project Overview
 
-Server Sorcery 101 is a small production-like virtual infrastructure project built with **Vagrant**, **VirtualBox**, and **Ubuntu Server** virtual machines.
+Infrastructure Insight is a small DevOps infrastructure project that demonstrates how a containerized diagnostic application can be deployed across multiple virtual machines.
 
-The infrastructure consists of four virtual machines:
+The project uses four Ubuntu Server virtual machines managed by Vagrant and VirtualBox:
 
-| VM       | Role               |      IP Address | Main Service         |
-| -------- | ------------------ | --------------: | -------------------- |
-| `lb-01`  | Load Balancer      | `192.168.56.10` | Nginx Load Balancer  |
-| `web-01` | Web Server 1       | `192.168.56.11` | Nginx                |
-| `web-02` | Web Server 2       | `192.168.56.12` | Nginx                |
-| `app-01` | Application Server | `192.168.56.13` | Nginx diagnostic app |
+| VM       | Role               | IP Address      | Main Responsibility                             |
+| -------- | ------------------ | --------------- | ----------------------------------------------- |
+| `lb-01`  | Load Balancer      | `192.168.56.10` | Public HTTP entrypoint and traffic distribution |
+| `web-01` | Web Server 1       | `192.168.56.11` | Frontend dashboard container                    |
+| `web-02` | Web Server 2       | `192.168.56.12` | Frontend dashboard container                    |
+| `app-01` | Application Server | `192.168.56.13` | Backend metrics API container                   |
 
-The goal of this project is to practice:
-
-* creating and managing multiple virtual machines;
-* configuring static private networking;
-* setting up a basic load-balanced web infrastructure;
-* applying Linux administration and security practices;
-* configuring SSH hardening;
-* configuring firewall rules with UFW;
-* enabling automatic security updates;
-* installing intrusion prevention software;
-* documenting infrastructure setup and validation.
-
----
-
-## Architecture
+The user accesses only the load balancer:
 
 ```text
-Host machine
-    |
-    | HTTP
-    v
-lb-01 / 192.168.56.10
-Nginx Load Balancer
-    |
-    +--> web-01 / 192.168.56.11
-    |    Nginx Web Server
-    |
-    +--> web-02 / 192.168.56.12
-         Nginx Web Server
-              |
-              v
-         app-01 / 192.168.56.13
-         Application Server
+Host / Browser
+      |
+      v
+lb-01:80
+      |
+      +-------------------+
+      |                   |
+      v                   v
+web-01:80             web-02:80
+Frontend container    Frontend container
+      |                   |
+      +---------+---------+
+                |
+                v
+app-01:3000
+Backend metrics API container
 ```
 
-Only the load balancer is intended to be directly accessed from the host machine over HTTP.
-The web servers are reachable by the load balancer, and the application server is reachable by the web servers.
+The frontend dashboard displays:
+
+* which web server served the current request;
+* backend server information;
+* OS information;
+* CPU information;
+* memory information;
+* backend uptime;
+* backend request count;
+* raw backend JSON response.
+
+The main success criterion is:
+
+```text
+http://192.168.56.10
+```
+
+opens the dashboard through the load balancer, shows backend metrics from `app-01`, and alternates between `web-01` and `web-02` after refreshing the page.
 
 ---
 
 ## Technologies Used
 
-* VirtualBox
 * Vagrant
+* VirtualBox
 * Ubuntu Server 22.04
-* Nginx
+* Docker Engine
+* Node.js + Express
+* NGINX
 * UFW
 * Fail2Ban
 * unattended-upgrades
-* Shell provisioning scripts
+* PowerShell smoke tests
+* Shell provisioning and deployment scripts
 
 ---
 
@@ -72,6 +77,19 @@ The web servers are reachable by the load balancer, and the application server i
 server-sorcery-101/
 ├── Vagrantfile
 ├── README.md
+├── backend/
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── server.js
+│   └── .dockerignore
+├── frontend/
+│   ├── Dockerfile
+│   ├── index.html
+│   ├── style.css
+│   ├── app.js
+│   ├── nginx.conf
+│   └── docker-entrypoint.d/
+│       └── 40-generate-server-info.sh
 ├── configs/
 │   └── nginx-lb.conf
 ├── docs/
@@ -82,9 +100,14 @@ server-sorcery-101/
 └── scripts/
     ├── app.sh
     ├── common.sh
+    ├── docker.sh
+    ├── deploy-back.sh
+    ├── deploy-frontend.sh
     ├── fail2ban.sh
+    ├── final-hardening.sh
     ├── firewall.sh
     ├── lb.sh
+    ├── smoke-test.ps1
     └── web.sh
 ```
 
@@ -92,40 +115,40 @@ server-sorcery-101/
 
 ## Requirements
 
-Before running the project, install:
+Install the following tools on the host machine:
 
 * VirtualBox
 * Vagrant
 * Git
 * PowerShell
 
-This project was tested on Windows using PowerShell with VirtualBox as the Vagrant provider.
+The project was developed and tested on Windows using PowerShell with VirtualBox as the Vagrant provider.
 
 ---
 
-## Setup Instructions
+## Setup and Installation
 
-Clone or open the project directory:
+### 1. Open the project directory
 
 ```powershell
 cd C:\Users\joell\server-sorcery-101
 ```
 
-Validate the Vagrantfile:
+### 2. Validate the Vagrantfile
 
 ```powershell
 vagrant validate
 ```
 
-Start all virtual machines:
+### 3. Start all virtual machines
 
 ```powershell
 vagrant up --no-parallel
 ```
 
-The `--no-parallel` flag is useful on machines with limited RAM because it starts VMs one by one instead of all at once.
+The `--no-parallel` flag starts VMs one by one. This is useful on machines with limited RAM.
 
-Check VM status:
+### 4. Check VM status
 
 ```powershell
 vagrant status
@@ -140,52 +163,177 @@ web-02    running
 app-01    running
 ```
 
----
-
-## VM Inventory
-
-| VM                 | Hostname |      IP Address |    RAM | CPU |
-| ------------------ | -------- | --------------: | -----: | --: |
-| Load Balancer      | `lb-01`  | `192.168.56.10` | 768 MB |   1 |
-| Web Server 1       | `web-01` | `192.168.56.11` | 512 MB |   1 |
-| Web Server 2       | `web-02` | `192.168.56.12` | 512 MB |   1 |
-| Application Server | `app-01` | `192.168.56.13` | 768 MB |   1 |
-
-The RAM values were intentionally kept low to make the project runnable on a laptop with limited available memory.
-
----
-
-## Network Configuration
-
-Each VM has a static private IP address in the `192.168.56.0/24` subnet.
-
-The main project network interface is usually `enp0s8`.
-
-Example validation command:
+### 5. Deploy the backend container on `app-01`
 
 ```powershell
-vagrant ssh lb-01 -c "hostname && ip -4 addr show enp0s8"
-vagrant ssh web-01 -c "hostname && ip -4 addr show enp0s8"
-vagrant ssh web-02 -c "hostname && ip -4 addr show enp0s8"
-vagrant ssh app-01 -c "hostname && ip -4 addr show enp0s8"
+vagrant ssh app-01 -c "sudo bash /vagrant/scripts/deploy-back.sh"
 ```
 
-Expected IP addresses:
+This script:
+
+* builds the backend Docker image;
+* removes the previous backend container if it exists;
+* starts the backend container;
+* exposes the backend API on `app-01:3000`;
+* performs a local health check.
+
+### 6. Deploy the frontend containers on `web-01` and `web-02`
+
+```powershell
+vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
+vagrant ssh web-02 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
+```
+
+This script:
+
+* builds the frontend Docker image;
+* stops the old host NGINX service if it is running;
+* removes the previous frontend container if it exists;
+* starts the frontend dashboard container;
+* generates `server-info.json` with the current web server name;
+* checks local frontend and backend proxy access.
+
+---
+
+## Usage Guide
+
+Open the dashboard in a browser:
 
 ```text
-lb-01   -> 192.168.56.10
-web-01  -> 192.168.56.11
-web-02  -> 192.168.56.12
-app-01  -> 192.168.56.13
+http://192.168.56.10
+```
+
+Expected behavior:
+
+* the dashboard loads through `lb-01`;
+* the responding web server is shown as `web-01` or `web-02`;
+* backend metrics are loaded from `app-01`;
+* refreshing the page several times shows traffic alternating between `web-01` and `web-02`.
+
+Check load balancing from PowerShell:
+
+```powershell
+1..10 | ForEach-Object { curl.exe -s http://192.168.56.10/server-info.json }
+```
+
+Expected result: responses should alternate between:
+
+```json
+{
+  "web_server": "web-01"
+}
+```
+
+and:
+
+```json
+{
+  "web_server": "web-02"
+}
+```
+
+---
+
+## Backend API
+
+The backend runs on `app-01` in a Docker container.
+
+Main endpoint:
+
+```text
+GET /metrics
+```
+
+Example checks:
+
+```powershell
+vagrant ssh app-01 -c "curl -s http://localhost:3000/metrics"
+vagrant ssh web-01 -c "curl -s http://app-01:3000/metrics"
+vagrant ssh web-02 -c "curl -s http://app-01:3000/metrics"
+```
+
+Example response:
+
+```json
+{
+  "backend_server": "app-01",
+  "container_hostname": "743d948dcddb",
+  "platform": "linux",
+  "os_type": "Linux",
+  "os_release": "5.15.0-181-generic",
+  "cpu_model": "13th Gen Intel(R) Core(TM) i7-13620H",
+  "cpu_cores": 1,
+  "memory_total_mb": 705,
+  "memory_free_mb": 338,
+  "uptime_seconds": 10258,
+  "request_count": 499,
+  "timestamp": "2026-06-24T00:06:05.773Z"
+}
+```
+
+Health endpoint:
+
+```text
+GET /health
+```
+
+---
+
+## Frontend Dashboard
+
+The frontend runs on both web servers in Docker containers.
+
+Each frontend container serves:
+
+```text
+/
+```
+
+and proxies backend API requests through:
+
+```text
+/api/metrics -> app-01:3000/metrics
+/api/health  -> app-01:3000/health
+```
+
+Each web server generates its own `server-info.json` file at container startup:
+
+```text
+/server-info.json
+```
+
+This allows the dashboard to display which web server handled the request.
+
+Validation:
+
+```powershell
+vagrant ssh web-01 -c "curl -s http://localhost/server-info.json"
+vagrant ssh web-02 -c "curl -s http://localhost/server-info.json"
+```
+
+Expected result:
+
+```json
+{
+  "web_server": "web-01"
+}
+```
+
+and:
+
+```json
+{
+  "web_server": "web-02"
+}
 ```
 
 ---
 
 ## Load Balancer
 
-The load balancer runs Nginx and forwards HTTP traffic to both web servers.
+The load balancer runs NGINX on `lb-01`.
 
-Nginx upstream configuration:
+It forwards HTTP traffic to both web servers:
 
 ```nginx
 upstream web_backend {
@@ -194,131 +342,17 @@ upstream web_backend {
 }
 ```
 
-The load balancer is accessible from the host machine:
-
-```powershell
-curl.exe http://192.168.56.10
-```
-
-Repeated requests should show responses from both web servers:
-
-```powershell
-1..8 | ForEach-Object { curl.exe -s http://192.168.56.10 | Select-String "Hello from" }
-```
-
-Expected result:
+The host machine should access the application only through:
 
 ```text
-<h1>Hello from web-01</h1>
-<h1>Hello from web-02</h1>
+http://192.168.56.10
 ```
 
----
-
-## Web Servers
-
-Both `web-01` and `web-02` run Nginx.
-
-Each web server serves a simple HTML page identifying itself:
-
-```text
-Hello from web-01
-Hello from web-02
-```
-
-Health checks:
+Round-robin validation:
 
 ```powershell
-vagrant ssh lb-01 -c "curl -s http://192.168.56.11/health"
-vagrant ssh lb-01 -c "curl -s http://192.168.56.12/health"
+1..10 | ForEach-Object { curl.exe -s http://192.168.56.10/server-info.json }
 ```
-
-Expected result:
-
-```text
-ok web-01
-ok web-02
-```
-
----
-
-## Application Server
-
-The application server runs a simple diagnostic Nginx page.
-
-Health check from the web servers:
-
-```powershell
-vagrant ssh web-01 -c "curl -s http://192.168.56.13/health"
-vagrant ssh web-02 -c "curl -s http://192.168.56.13/health"
-```
-
-Expected result:
-
-```text
-ok app-01
-ok app-01
-```
-
-The application server is not directly reachable from the load balancer over HTTP due to firewall rules.
-
-Validation:
-
-```powershell
-vagrant ssh lb-01 -c "timeout 3 curl -s http://192.168.56.13/health || echo blocked"
-```
-
-Expected result:
-
-```text
-blocked
-```
-
----
-
-## Linux Administration
-
-A dedicated administrative user named `devops` is created on each VM.
-
-Validation:
-
-```powershell
-vagrant ssh lb-01 -c "id devops && groups devops"
-```
-
-Expected result: the `devops` user exists and belongs to the `sudo` group.
-
-Passwordless sudo is configured for the `devops` user for easier automation and review.
-
----
-
-## SSH Hardening
-
-The SSH configuration applies the following hardening rules:
-
-```text
-PermitRootLogin no
-PasswordAuthentication no
-PubkeyAuthentication yes
-AllowUsers devops vagrant
-```
-
-Validation:
-
-```powershell
-vagrant ssh lb-01 -c "sudo sshd -T | grep -E 'permitrootlogin|passwordauthentication|pubkeyauthentication|allowusers'"
-```
-
-Expected result:
-
-```text
-permitrootlogin no
-passwordauthentication no
-pubkeyauthentication yes
-allowusers devops vagrant
-```
-
-The `vagrant` user is intentionally kept allowed so that Vagrant can continue managing the machines during provisioning and review.
 
 ---
 
@@ -326,141 +360,117 @@ The `vagrant` user is intentionally kept allowed so that Vagrant can continue ma
 
 UFW is enabled on all VMs.
 
-Default policies:
+Default policy:
 
 ```text
 deny incoming
 allow outgoing
 ```
 
-Firewall access model:
+Access model:
 
-| Source   | Destination | Access  |
-| -------- | ----------- | ------- |
-| Host     | `lb-01:80`  | Allowed |
-| Host     | `web-01:80` | Blocked |
-| Host     | `web-02:80` | Blocked |
-| Host     | `app-01:80` | Blocked |
-| `lb-01`  | `web-01:80` | Allowed |
-| `lb-01`  | `web-02:80` | Allowed |
-| `lb-01`  | `app-01:80` | Blocked |
-| `web-01` | `app-01:80` | Allowed |
-| `web-02` | `app-01:80` | Allowed |
+| Source   | Destination   | Access  |
+| -------- | ------------- | ------- |
+| Host     | `lb-01:80`    | Allowed |
+| Host     | `web-01:80`   | Blocked |
+| Host     | `web-02:80`   | Blocked |
+| Host     | `app-01:3000` | Blocked |
+| `lb-01`  | `web-01:80`   | Allowed |
+| `lb-01`  | `web-02:80`   | Allowed |
+| `web-01` | `app-01:3000` | Allowed |
+| `web-02` | `app-01:3000` | Allowed |
 
-Check UFW status:
-
-```powershell
-vagrant ssh lb-01 -c "sudo ufw status verbose"
-vagrant ssh web-01 -c "sudo ufw status verbose"
-vagrant ssh web-02 -c "sudo ufw status verbose"
-vagrant ssh app-01 -c "sudo ufw status verbose"
-```
-
-Direct access from the host to web servers should fail:
+Check firewall status:
 
 ```powershell
-curl.exe --connect-timeout 3 http://192.168.56.11
-curl.exe --connect-timeout 3 http://192.168.56.12
+vagrant ssh lb-01 -c "sudo ufw status numbered"
+vagrant ssh web-01 -c "sudo ufw status numbered"
+vagrant ssh web-02 -c "sudo ufw status numbered"
+vagrant ssh app-01 -c "sudo ufw status numbered"
 ```
 
-Expected result: connection timeout or connection failure.
+Direct backend access from the host should fail:
+
+```powershell
+curl.exe --connect-timeout 5 http://192.168.56.13:3000/metrics
+```
+
+The expected result is a timeout or failed connection.
 
 ---
 
-## Secure Umask
+## Docker Networking Note
 
-A secure umask is configured:
+The containers use host networking so that UFW can reliably control access to service ports.
 
-```text
-umask 027
-```
+Originally, Docker port publishing with `-p` was considered. However, Docker manages its own iptables rules, which can make services reachable even when UFW rules look restrictive.
 
-This prevents newly created files and directories from being world-readable or world-writable by default.
-
-Validation:
-
-```powershell
-vagrant ssh lb-01 -c "cat /etc/profile.d/99-secure-umask.sh && grep '^UMASK' /etc/login.defs"
-```
-
-Expected result:
+Using host networking keeps the firewall behavior easier to reason about:
 
 ```text
-umask 027
-UMASK 027
+container service port -> VM network stack -> UFW rules
 ```
+
+This makes it clear that:
+
+* `app-01:3000` is accessible from `web-01` and `web-02`;
+* `app-01:3000` is not directly accessible from the host;
+* `web-01:80` and `web-02:80` are accessible from `lb-01`;
+* the public HTTP entrypoint remains `lb-01:80`.
 
 ---
 
-## Automatic Security Updates
+## Security Features
 
-Automatic security updates are enabled with `unattended-upgrades`.
+The infrastructure keeps the security baseline from the previous setup:
 
-Validation:
+* dedicated `devops` user;
+* disabled root SSH login;
+* disabled SSH password login;
+* public-key authentication;
+* UFW firewall;
+* automatic security updates;
+* Fail2Ban for SSH intrusion prevention;
+* secure default umask.
 
-```powershell
-vagrant ssh lb-01 -c "systemctl is-active unattended-upgrades"
-vagrant ssh web-01 -c "systemctl is-active unattended-upgrades"
-vagrant ssh web-02 -c "systemctl is-active unattended-upgrades"
-vagrant ssh app-01 -c "systemctl is-active unattended-upgrades"
-```
-
-Expected result:
+During development, both `devops` and `vagrant` are allowed through SSH:
 
 ```text
-active
+AllowUsers devops vagrant
 ```
+
+The `vagrant` user is intentionally kept because Vagrant needs SSH access to manage and provision the virtual machines.
+
+For final hardening, the script below can be used:
+
+```powershell
+vagrant ssh lb-01 -c "sudo bash /vagrant/scripts/final-hardening.sh"
+vagrant ssh web-01 -c "sudo bash /vagrant/scripts/final-hardening.sh"
+vagrant ssh web-02 -c "sudo bash /vagrant/scripts/final-hardening.sh"
+vagrant ssh app-01 -c "sudo bash /vagrant/scripts/final-hardening.sh"
+```
+
+Important: after final hardening, regular `vagrant ssh` and `vagrant provision` may stop working because the `vagrant` user is no longer allowed to log in. This is expected.
 
 ---
 
-## Intrusion Prevention Bonus: Fail2Ban
+## Smoke Test
 
-Fail2Ban is installed and configured as a bonus security feature.
-
-It monitors SSH login attempts and can ban suspicious IP addresses after repeated failed authentication attempts.
-
-Validation:
+A PowerShell smoke test is available:
 
 ```powershell
-vagrant ssh lb-01 -c "sudo systemctl is-active fail2ban"
-vagrant ssh lb-01 -c "sudo fail2ban-client status"
-vagrant ssh lb-01 -c "sudo fail2ban-client status sshd"
+powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
 ```
 
-Expected result:
+The smoke test checks:
 
-```text
-active
-```
-
-and:
-
-```text
-Jail list: sshd
-```
-
-It is normal for the number of banned IPs to be `0` if there were no failed SSH attempts.
-
----
-
-## Validation Checklist
-
-A detailed validation checklist is available in:
-
-```text
-docs/validation-checklist.md
-```
-
-Recommended quick validation commands:
-
-```powershell
-vagrant status
-curl.exe http://192.168.56.10
-1..8 | ForEach-Object { curl.exe -s http://192.168.56.10 | Select-String "Hello from" }
-vagrant ssh lb-01 -c "sudo ufw status verbose"
-vagrant ssh lb-01 -c "sudo fail2ban-client status"
-vagrant ssh lb-01 -c "sudo sshd -T | grep -E 'permitrootlogin|passwordauthentication|pubkeyauthentication|allowusers'"
-```
+* VM status;
+* backend container status;
+* frontend container status on both web servers;
+* backend `/metrics` locally on `app-01`;
+* backend access through both web servers;
+* load balancer round-robin behavior;
+* dashboard availability through `lb-01`.
 
 ---
 
@@ -490,67 +500,194 @@ Run provisioning again:
 vagrant provision
 ```
 
-SSH into a VM:
+Deploy backend:
 
 ```powershell
-vagrant ssh lb-01
-vagrant ssh web-01
-vagrant ssh web-02
-vagrant ssh app-01
+vagrant ssh app-01 -c "sudo bash /vagrant/scripts/deploy-back.sh"
+```
+
+Deploy frontend:
+
+```powershell
+vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
+vagrant ssh web-02 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
+```
+
+Check containers:
+
+```powershell
+vagrant ssh app-01 -c "sudo docker ps"
+vagrant ssh web-01 -c "sudo docker ps"
+vagrant ssh web-02 -c "sudo docker ps"
+```
+
+Check load balancing:
+
+```powershell
+1..10 | ForEach-Object { curl.exe -s http://192.168.56.10/server-info.json }
+```
+
+---
+
+## Troubleshooting
+
+### Docker provisioning fails during `apt install`
+
+Run provisioning again:
+
+```powershell
+vagrant provision app-01
+vagrant provision web-01
+vagrant provision web-02
+```
+
+Temporary package manager locks or network timing issues can happen during Docker installation.
+
+### Port 80 is already allocated on a web server
+
+The old host NGINX service may still be running.
+
+Check:
+
+```powershell
+vagrant ssh web-01 -c "sudo ss -tulpn | grep ':80'"
+```
+
+Stop NGINX and redeploy frontend:
+
+```powershell
+vagrant ssh web-01 -c "sudo systemctl stop nginx"
+vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-frontend.sh"
+```
+
+Repeat for `web-02` if needed.
+
+### Backend is not reachable from web servers
+
+Check backend container:
+
+```powershell
+vagrant ssh app-01 -c "sudo docker ps"
+vagrant ssh app-01 -c "curl -s http://localhost:3000/metrics"
+```
+
+Check firewall:
+
+```powershell
+vagrant ssh app-01 -c "sudo ufw status numbered"
+```
+
+`app-01` should allow `3000/tcp` from:
+
+```text
+192.168.56.11
+192.168.56.12
+```
+
+### Backend is directly reachable from the host
+
+This should not happen in the final setup.
+
+Check that the backend container is not using Docker port publishing with `-p 3000:3000`.
+
+The backend should be started with host networking so UFW controls access to port `3000`.
+
+---
+
+## Review Demo Flow
+
+During review, the project can be demonstrated in this order:
+
+1. Show all VMs are running:
+
+```powershell
+vagrant status
+```
+
+2. Open the dashboard:
+
+```text
+http://192.168.56.10
+```
+
+3. Refresh the page several times and show that the responding web server changes between `web-01` and `web-02`.
+
+4. Show backend metrics:
+
+```powershell
+vagrant ssh app-01 -c "curl -s http://localhost:3000/metrics"
+```
+
+5. Show that both web servers can reach the backend:
+
+```powershell
+vagrant ssh web-01 -c "curl -s http://localhost/api/metrics"
+vagrant ssh web-02 -c "curl -s http://localhost/api/metrics"
+```
+
+6. Show load balancer round-robin:
+
+```powershell
+1..10 | ForEach-Object { curl.exe -s http://192.168.56.10/server-info.json }
+```
+
+7. Show firewall rules:
+
+```powershell
+vagrant ssh lb-01 -c "sudo ufw status numbered"
+vagrant ssh web-01 -c "sudo ufw status numbered"
+vagrant ssh web-02 -c "sudo ufw status numbered"
+vagrant ssh app-01 -c "sudo ufw status numbered"
+```
+
+8. Show that direct backend access from the host is blocked:
+
+```powershell
+curl.exe --connect-timeout 5 http://192.168.56.13:3000/metrics
 ```
 
 ---
 
 ## Challenges and Solutions
 
+### Docker and UFW interaction
+
+Docker port publishing can bypass UFW because Docker manages its own iptables rules.
+
+Solution:
+
+* containers use host networking;
+* UFW controls VM-level access to ports `80` and `3000`;
+* backend access is restricted to the web servers.
+
+### SSH hardening and Vagrant
+
+Strict SSH hardening can conflict with Vagrant because Vagrant needs SSH access to manage machines.
+
+Solution:
+
+* during development, both `devops` and `vagrant` are allowed;
+* final hardening can be applied separately with `scripts/final-hardening.sh`.
+
 ### Limited RAM
 
-Running four VMs at the same time used a lot of memory.
+Running four VMs at the same time can use a lot of memory.
 
 Solution:
 
-* reduced RAM allocation for each VM;
-* used lightweight Ubuntu Server images;
-* started machines sequentially with `vagrant up --no-parallel`;
-* stopped unnecessary background services before starting the environment.
-
-### SSH Hardening and Vagrant Access
-
-Disabling password login and root login is required for security.
-However, Vagrant needs SSH access to manage the VMs.
-
-Solution:
-
-```text
-AllowUsers devops vagrant
-```
-
-This keeps SSH access restricted while still allowing Vagrant to provision and manage the machines.
-
-### Firewall Rules
-
-The firewall had to be strict without breaking internal communication.
-
-Solution:
-
-* only `lb-01` accepts HTTP from the host;
-* `web-01` and `web-02` accept HTTP only from `lb-01`;
-* `app-01` accepts HTTP only from `web-01` and `web-02`;
-* SSH remains available for administration.
+* lightweight Ubuntu Server VMs;
+* reduced RAM allocation;
+* sequential startup with `vagrant up --no-parallel`.
 
 ---
 
-## Review Notes
+## Additional Documentation
 
-During the review, I can demonstrate:
+More detailed documentation is available in:
 
-* all four VMs running;
-* static IP configuration;
-* internal network connectivity;
-* load balancing between `web-01` and `web-02`;
-* restricted direct access to web servers;
-* restricted access to the application server;
-* SSH hardening;
-* UFW firewall rules;
-* automatic security updates;
-* Fail2Ban intrusion prevention.
+```text
+docs/architecture.md
+docs/decisions.md
+docs/troubleshooting.md
+docs/validation-checklist.md
+```

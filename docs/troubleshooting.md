@@ -1,255 +1,128 @@
 # Troubleshooting
 
-This document describes problems encountered during the project and how they were solved.
+## Docker install fails during provisioning
 
-## VirtualBox Python Bindings Warning
+Usually temporary apt/network issue.
 
-During VirtualBox installation, a warning appeared about missing Python Core and win32api dependencies.
-
-This warning was not critical for this project.
-
-Reason:
-
-- Python bindings are only needed for VirtualBox SDK usage;
-- this project uses VirtualBox through Vagrant;
-- no Python automation against the VirtualBox SDK is required.
-
-Solution:
-
-- continued VirtualBox installation without installing Python bindings.
-
-## Virtualization Detection Confusion
-
-Windows PowerShell showed:
-
-```text
-VirtualizationFirmwareEnabled : False
-```
-
-However, BIOS showed:
-
-```text
-Intel Virtualization Technology: Enabled
-VT-d: Enabled
-```
-
-WSL2 was also working.
-
-Conclusion:
-
-- hardware virtualization was enabled in BIOS;
-- Windows Hypervisor was active;
-- the PowerShell output was misleading in this environment.
-
-Solution:
-
-- verified BIOS settings;
-- verified that WSL2 was running;
-- tested VirtualBox and Vagrant directly by creating a test VM.
-
-## Vagrant Box `base` Error
-
-An error occurred:
-
-```text
-Couldn't open file C:/Users/joell/server-sorcery-101/base
-```
-
-Cause:
-
-The Vagrantfile used:
-
-```ruby
-config.vm.box = "base"
-```
-
-Vagrant tried to find a local or remote box named `base`.
-
-Solution:
-
-Changed the box to:
-
-```ruby
-config.vm.box = "ubuntu/jammy64"
-```
-
-## VM Boot Timeout
-
-During `vagrant up`, Vagrant timed out while waiting for a VM to boot.
-
-The host machine was using around 95% RAM.
-
-Cause:
-
-The VMs were too heavy for the available memory, and Ubuntu booted too slowly.
-
-Solution:
-
-- reduced VM memory allocation;
-- increased boot timeout;
-- disabled VirtualBox GUI windows;
-- used sequential startup:
+Retry:
 
 ```powershell
-vagrant up --no-parallel
+vagrant provision app-01
+vagrant provision web-01
+vagrant provision web-02
 ```
 
-Final memory allocation:
+## Port 80 is already used on web server
 
-| VM | RAM |
-|---|---:|
-| `lb-01` | 768 MB |
-| `web-01` | 512 MB |
-| `web-02` | 512 MB |
-| `app-01` | 768 MB |
+Old host NGINX may still be running.
 
-## VirtualBox VM Console Asking for Login
-
-A VirtualBox VM window showed an Ubuntu login prompt.
-
-This was expected.
-
-The project does not require logging in through the VirtualBox GUI console.
-
-Correct way to access a VM:
+Check:
 
 ```powershell
-vagrant ssh lb-01
+vagrant ssh web-01 -c "sudo ss -tulpn | grep ':80'"
 ```
 
-If the VM captures the mouse or keyboard, press:
+Fix:
+
+```powershell
+vagrant ssh web-01 -c "sudo systemctl stop nginx"
+vagrant ssh web-01 -c "sudo bash /vagrant/scripts/deploy-front.sh"
+```
+
+Repeat for `web-02` if needed.
+
+## Backend works on app-01 but not from web servers
+
+Check backend:
+
+```powershell
+vagrant ssh app-01 -c "sudo docker ps"
+vagrant ssh app-01 -c "curl -s http://localhost:3000/metrics"
+```
+
+Check firewall:
+
+```powershell
+vagrant ssh app-01 -c "sudo ufw status numbered"
+```
+
+`app-01` should allow `3000/tcp` from:
 
 ```text
-Right Ctrl
+192.168.56.11
+192.168.56.12
 ```
 
-to release it.
+## Dashboard loads but metrics fail
 
-## Shell Script Line Endings
+Check frontend proxy:
 
-Because the project was edited on Windows, shell scripts could accidentally use CRLF line endings.
-
-Linux scripts should use LF line endings.
-
-Solution:
-
-In VS Code:
-
-```text
-Bottom right corner -> CRLF -> LF -> Save
+```powershell
+vagrant ssh web-01 -c "curl -s http://localhost/api/metrics"
+vagrant ssh web-02 -c "curl -s http://localhost/api/metrics"
 ```
 
-This was checked for all `.sh` scripts.
+Check frontend logs:
 
-## Fail2Ban Socket Error
-
-During Fail2Ban provisioning, this error appeared:
-
-```text
-Failed to access socket path: /var/run/fail2ban/fail2ban.sock. Is fail2ban running?
+```powershell
+vagrant ssh web-01 -c "sudo docker logs infrastructure-insight-frontend"
 ```
 
-Cause:
+## Load balancer does not switch servers
 
-Fail2Ban was installed, but the service did not start correctly before `fail2ban-client status` was executed.
+Check both web servers directly from `lb-01`:
 
-Solution:
+```powershell
+vagrant ssh lb-01 -c "curl -s http://192.168.56.11/server-info.json"
+vagrant ssh lb-01 -c "curl -s http://192.168.56.12/server-info.json"
+```
 
-- installed `python3-systemd`;
-- simplified the Fail2Ban jail config;
-- added configuration test:
+Reload NGINX on `lb-01`:
+
+```powershell
+vagrant ssh lb-01 -c "sudo nginx -t && sudo systemctl reload nginx"
+```
+
+Test again:
+
+```powershell
+1..10 | ForEach-Object { curl.exe -s http://192.168.56.10/server-info.json }
+```
+
+## Backend is reachable directly from host
+
+This is wrong for final setup.
+
+Test:
+
+```powershell
+curl.exe --connect-timeout 5 http://192.168.56.13:3000/metrics
+```
+
+Expected: timeout or failed connection.
+
+Check backend deploy script. It should use:
 
 ```bash
-fail2ban-client -t
+--network host
 ```
 
-- added a short wait loop before checking status:
+Not:
 
 ```bash
-for i in {1..10}; do
-  if fail2ban-client ping >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
+-p 3000:3000
 ```
 
-After this change, Fail2Ban started correctly.
-
-## Direct Access to Web Servers Times Out
-
-After enabling UFW, direct access from the host to web servers timed out:
+Redeploy:
 
 ```powershell
-curl.exe --connect-timeout 3 http://192.168.56.11
-curl.exe --connect-timeout 3 http://192.168.56.12
+vagrant ssh app-01 -c "sudo bash /vagrant/scripts/deploy-back.sh"
 ```
 
-This is expected behavior.
+## Vagrant breaks after final-hardening.sh
 
-Reason:
+Expected if final hardening was applied.
 
-The web servers allow HTTP only from the load balancer:
+`final-hardening.sh` changes SSH to `devops` only. Vagrant normally logs in as `vagrant`, so `vagrant ssh` and `vagrant provision` may stop working.
 
-```text
-192.168.56.10
-```
-
-Correct access path:
-
-```text
-Host -> lb-01 -> web-01/web-02
-```
-
-## Load Balancer Cannot Access app-01
-
-This command returns `blocked`:
-
-```powershell
-vagrant ssh lb-01 -c "timeout 3 curl -s http://192.168.56.13/health || echo blocked"
-```
-
-This is expected behavior.
-
-Reason:
-
-The application server accepts HTTP only from:
-
-```text
-web-01
-web-02
-```
-
-The load balancer should not directly access the application server.
-
-## Useful Recovery Commands
-
-Stop all VMs:
-
-```powershell
-vagrant halt
-```
-
-Destroy all VMs:
-
-```powershell
-vagrant destroy -f
-```
-
-Start all VMs one by one:
-
-```powershell
-vagrant up --no-parallel
-```
-
-Run provisioning again:
-
-```powershell
-vagrant provision
-```
-
-Check VM status:
-
-```powershell
-vagrant status
-```
+Use it only at the very end.
